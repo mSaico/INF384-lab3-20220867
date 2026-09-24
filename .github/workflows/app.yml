@@ -73,12 +73,24 @@ jobs:
   #
   # Sustituir el paso centinela por la implementacion.
   calidad:
+    needs: pruebas
     runs-on: ubuntu-latest
     steps:
-      - name: Sin implementar
-        run: |
-          echo "::error::El job 'calidad' no esta implementado."
-          exit 1
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Descargar reporte de cobertura
+        uses: actions/download-artifact@v4
+        with:
+          name: cobertura
+          path: coverage/
+
+      - name: Analisis de SonarCloud
+        uses: SonarSource/sonarqube-scan-action@v8
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: "https://sonarcloud.io"
 
   # TODO
   # Buscar credenciales escritas en el codigo y en el historial del repositorio.
@@ -95,10 +107,12 @@ jobs:
   secretos:
     runs-on: ubuntu-latest
     steps:
-      - name: Sin implementar
-        run: |
-          echo "::error::El job 'secretos' no esta implementado."
-          exit 1
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Escaneo de secretos
+        uses: gitleaks/gitleaks-action@v3
 
   # TODO
   # Contrastar el arbol de dependencias declarado en package-lock.json contra
@@ -116,10 +130,14 @@ jobs:
   dependencias:
     runs-on: ubuntu-latest
     steps:
-      - name: Sin implementar
-        run: |
-          echo "::error::El job 'dependencias' no esta implementado."
-          exit 1
+      - uses: actions/checkout@v4
+
+      - name: Analisis de vulnerabilidades en dependencias
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: 'fs'
+          scan-ref: 'package-lock.json'
+          exit-code: 0
 
   # TODO
   # Buscar patrones explotables en el codigo fuente.
@@ -131,10 +149,21 @@ jobs:
   estatico:
     runs-on: ubuntu-latest
     steps:
-      - name: Sin implementar
+      - uses: actions/checkout@v4
+
+      - name: Analizar el codigo fuente
         run: |
-          echo "::error::El job 'estatico' no esta implementado."
-          exit 1
+          docker run --rm \
+            --volume "${PWD}:/src" \
+            --workdir /src \
+            --env SEMGREP_SEND_METRICS=off \
+            semgrep/semgrep \
+            semgrep scan \
+            --config=p/default \
+            --config=p/javascript \
+            --json --quiet \
+            --output=semgrep.json \
+            src/
 
   # TODO
   # Construir la imagen de la aplicacion y publicarla en el registro privado.
@@ -168,12 +197,55 @@ jobs:
   #
   # Sustituir el paso centinela por la implementacion.
   publicar:
+    needs: [calidad, secretos, dependencias, estatico]
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
     steps:
-      - name: Sin implementar
+      - uses: actions/checkout@v4
+
+      - name: Credenciales temporales de AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - name: Iniciar sesion en AWS ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Construir y publicar imagen
+        id: push
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: inf384-lab3
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          echo "::error::El job 'publicar' no esta implementado."
-          exit 1
+          # 1. Extraer los primeros 7 caracteres del SHA del commit
+          SHA_CORTO=$(echo $COMMIT_SHA | cut -c1-7)
+          
+          # 2. Definir las URIs con los dos tags independientes
+          TAG_SHA=$REGISTRY/$REPOSITORY:$SHA_CORTO
+          TAG_PRD=$REGISTRY/$REPOSITORY:prd
+          
+          # 3. Construir la imagen con la plataforma y label requeridos
+          docker build \
+            --platform linux/amd64 \
+            --label "org.opencontainers.image.title=$REPOSITORY" \
+            -t $TAG_SHA \
+            -t $TAG_PRD \
+            .
+            
+          # 4. Publicar la imagen en el registro (ambos tags)
+          docker push $TAG_SHA
+          docker push $TAG_PRD
+          
+          # 5. Extraer el digest directamente de la imagen publicada y enviarlo al output
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $TAG_SHA)
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
 
   # Este job viene completo y no se modifica.
   # Las estrategias de despliegue y la verificacion posterior son contenido
