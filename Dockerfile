@@ -2,20 +2,19 @@
 # Contiene cinco malas practicas deliberadas. Cada una lleva su numero en la
 # linea anterior. Corregirlas es el bloque A1 de la guia del laboratorio.
 
-# defecto 1
+# --- Etapa 1: Construcción (Builder) ---
+# Defecto 1 corregido: Versión fija de Node (20)
 FROM public.ecr.aws/lambda/nodejs:20 AS build
 
-# defecto 2
+# Aplicamos la restricción del profesor: todo el trabajo de esta etapa se hará en /build
+WORKDIR /build
+
+# Defecto 2 y 3 corregidos: Copiar manifiestos primero e instalar con npm ci
 COPY package.json package-lock.json ./
-
-# defecto 3
 RUN npm ci
+
+# Copiar el código fuente de la aplicación
 COPY src/ src/
-RUN npm run build
-
-FROM public.ecr.aws/lambda/nodejs:20
-
-COPY --from=build /var/task/dist/ /var/task/dist/
 
 ### NO TOCAR DE ACA EN ADELANTE, CONSIDEREN QUE EL WORKDIR DEBE SER /build
 RUN npx esbuild src/handler.js \
