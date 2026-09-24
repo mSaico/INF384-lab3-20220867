@@ -17,8 +17,6 @@ FROM public.ecr.aws/lambda/nodejs:20
 
 COPY --from=builder /var/task/dist/ /var/task/dist/
 
-CMD ["dist/handler.handler"]
-
 ### NO TOCAR DE ACA EN ADELANTE, CONSIDEREN QUE EL WORKDIR DEBE SER /build
 RUN npx esbuild src/handler.js \
       --bundle --platform=node --target=node20 \
