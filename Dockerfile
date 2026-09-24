@@ -3,7 +3,7 @@
 # linea anterior. Corregirlas es el bloque A1 de la guia del laboratorio.
 
 # defecto 1
-FROM public.ecr.aws/lambda/nodejs:20 AS builder
+FROM public.ecr.aws/lambda/nodejs:20 AS build
 
 # defecto 2
 COPY package.json package-lock.json ./
@@ -15,7 +15,7 @@ RUN npm run build
 
 FROM public.ecr.aws/lambda/nodejs:20
 
-COPY --from=builder /var/task/dist/ /var/task/dist/
+COPY --from=build /var/task/dist/ /var/task/dist/
 
 ### NO TOCAR DE ACA EN ADELANTE, CONSIDEREN QUE EL WORKDIR DEBE SER /build
 RUN npx esbuild src/handler.js \
