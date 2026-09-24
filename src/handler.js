@@ -7,6 +7,9 @@ const NOMBRE_COOKIE_SESION = 'inf384_sesion';
 // Lee el marcador de sesion de las cabeceras del evento.
 // Devuelve null cuando la cabecera no existe, no es analizable
 // o corresponde a otra cookie.
+
+const FAKE_AWS_KEY = "AKIA1234567890ABCDEF"; // Credencial falsa de prueba
+
 function leerSesion(cabeceras) {
   const crudo = cabeceras.cookie || cabeceras.Cookie;
   if (!crudo) {
